@@ -85,6 +85,39 @@ def save_results(metrics: Dict, features_info: Dict, eda_info: Dict, args, outpu
     
     print(f" Complete results saved to: {output_dir}/complete_pipeline_results.json")
 
+
+def export_feature_selection(selected_features: List[str], target_var: str, 
+                            features_info: Dict, output_dir: str = "outputs"):
+    """
+    Export feature selection configuration for use by other scripts.
+    
+    This creates a standardized JSON file that can be consumed by controlled
+    testing scripts to maintain consistency in feature usage.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Create exportable configuration
+    feature_config = {
+        'target_variable': target_var,
+        'selected_features': selected_features,
+        'feature_count': len(selected_features),
+        'selection_method': features_info.get('selection_method', 'automatic'),
+        'timestamp': pd.Timestamp.now().isoformat(),
+        'selection_criteria': features_info.get('selection_criteria', {}),
+        'analysis_summary': features_info.get('analysis_summary', {}),
+        # Include feature details if available (for automatic selection)
+        'feature_details': features_info.get('selected_features_details', [])
+    }
+    
+    # Save feature configuration
+    config_path = f"{output_dir}/feature_selection_config.json"
+    with open(config_path, 'w') as f:
+        json.dump(feature_config, f, indent=2, default=str)
+    
+    print(f" Feature selection config exported to: {config_path}")
+    
+    return config_path
+
 # ╰───────────────────────────────────────────────────────────────────────╯
 
 # ╭────────────────────────── Análise Exploratória (AED) ─────────────────╮
@@ -1018,6 +1051,9 @@ def main(args):
     
     # SAVE COMPLETE RESULTS
     save_results(metrics, features_info, eda_info, args, args.output)
+    
+    # EXPORT FEATURE SELECTION CONFIG
+    export_feature_selection(selected_features, args.target, features_info, args.output)
     
     # GENERATE COMPLETE VISUALIZATIONS
     plot_complete_results(eda_info, features_info, history, y_true, y_pred, args.target, args.output)

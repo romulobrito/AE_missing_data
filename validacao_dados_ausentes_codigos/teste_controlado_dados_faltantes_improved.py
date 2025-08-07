@@ -52,6 +52,63 @@ warnings.filterwarnings('ignore')
 
 # ╭───────────────────────────── Utilities ─────────────────────────────╮
 
+def load_feature_config(config_path: Optional[str] = None) -> Tuple[str, List[str]]:
+    """
+    Load feature configuration from JSON file exported by cs_ae_with_eda.py.
+    
+    Args:
+        config_path: Path to feature_selection_config.json file
+        
+    Returns:
+        Tuple of (target_variable, selected_features)
+    """
+    # Default configuration (fallback)
+    default_target = '1251_FIT_801C_2'
+    default_features = [
+        '1251_FIC_801C',
+        '1251_PIT_806C', 
+        '1251_PIT_808C',
+        '1251_FIT_802C',
+        '1251_PDI_807C'
+    ]
+    
+    if config_path is None:
+        print(" Using default feature configuration (hardcoded)")
+        return default_target, default_features
+    
+    config_file = Path(config_path)
+    if not config_file.exists():
+        print(f" Feature config file not found: {config_path}")
+        print(" Falling back to default configuration")
+        return default_target, default_features
+    
+    try:
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        
+        target_var = config.get('target_variable', default_target)
+        features = config.get('selected_features', default_features)
+        selection_method = config.get('selection_method', 'unknown')
+        feature_count = config.get('feature_count', len(features))
+        
+        print(f" Loaded feature configuration from: {config_path}")
+        print(f"   Target: {target_var}")
+        print(f"   Features: {feature_count} variables")
+        print(f"   Selection method: {selection_method}")
+        
+        # Validate configuration
+        if not target_var or not features:
+            print(" Invalid configuration detected, using defaults")
+            return default_target, default_features
+        
+        return target_var, features
+        
+    except (json.JSONDecodeError, KeyError) as e:
+        print(f" Error loading feature config: {e}")
+        print(" Falling back to default configuration")
+        return default_target, default_features
+
+
 def set_seed(seed: int = 42) -> None:
     """Define complete seeds for total reproducibility."""
     random.seed(seed)
@@ -828,15 +885,8 @@ def main(args):
     
     print(f"Dataset loaded: {df.shape[0]} samples, {df.shape[1]} variables")
     
-    # Use specific target and features 
-    target_var = '1251_FIT_801C_2'
-    features = [
-        '1251_FIC_801C',
-        '1251_PIT_806C', 
-        '1251_PIT_808C',
-        '1251_FIT_802C',
-        '1251_PDI_807C'
-    ]
+    # Load feature configuration (from cs_ae_with_eda.py export or default)
+    target_var, features = load_feature_config(args.feature_config)
     
     # Check if target and features exist
     vars_interesse = [target_var] + features
@@ -1119,6 +1169,10 @@ if __name__ == "__main__":
     # Required arguments
     parser.add_argument('--data', required=True,
                        help='Path to .h5/.csv file with industrial data')
+    
+    # Feature configuration arguments
+    parser.add_argument('--feature_config',
+                       help='Path to feature_selection_config.json from cs_ae_with_eda.py (optional, uses defaults if not provided)')
     
     # Missing data injection arguments
     parser.add_argument('--mechanism', choices=['MCAR', 'MAR', 'MNAR'], default='MCAR',
