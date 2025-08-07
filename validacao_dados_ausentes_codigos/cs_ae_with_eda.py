@@ -519,6 +519,113 @@ class EarlyStopping:
 # ╭────────────────────────── Training & Evaluation ────────────────────╮
 # 
 
+def generate_temporal_comparison_plot(model: nn.Module, df: pd.DataFrame, selected_features: List[str], 
+                                     target_var: str, scaler_X, scaler_y, device: str, 
+                                     output_dir: str = "outputs"):
+    """
+    Generate temporal comparison plot showing real vs predicted values with missing data regions.
+    
+    This function:
+    1. Imputes missing values in features using training means
+    2. Generates predictions for the entire dataset
+    3. Creates a scatter plot comparing real vs predicted values
+    4. Highlights regions with missing data
+    """
+    print("\n GENERATING TEMPORAL COMPARISON PLOT")
+    print("-" * 45)
+    
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Prepare all features data
+    all_features = df[selected_features].copy()
+    
+    # Impute missing values in features using training means
+    train_means = all_features.mean()
+    all_features_imputed = all_features.fillna(train_means)
+    
+    if all_features_imputed.isna().sum().sum() > 0:
+        print("  Warning: Still have NaNs, filling with 0")
+        all_features_imputed = all_features_imputed.fillna(0)
+    
+    # Scale features
+    all_features_scaled = scaler_X.transform(all_features_imputed)
+    all_features_tensor = torch.FloatTensor(all_features_scaled).to(device)
+    
+    # Generate predictions for entire dataset
+    model.eval()
+    with torch.no_grad():
+        all_predictions_scaled = model(all_features_tensor).cpu().numpy().flatten()
+    
+    # Inverse transform predictions
+    all_predictions_original = scaler_y.inverse_transform(
+        all_predictions_scaled.reshape(-1, 1)
+    ).flatten()
+    
+    # Clip predictions to reasonable range
+    all_predictions_original = np.clip(all_predictions_original, 0.001, 100)
+    
+    # Get original target data
+    dados_originais = df[target_var].copy()
+    indices_presentes = ~dados_originais.isna()
+    valores_reais = dados_originais[indices_presentes]
+    indices_reais = np.where(indices_presentes)[0]
+    indices_ausentes = np.where(indices_presentes == False)[0]
+    
+    print(f"  Real values: {len(valores_reais)}")
+    print(f"  Missing values: {len(indices_ausentes)}")
+    print(f"  Total predictions: {len(all_predictions_original)}")
+    
+    # Create temporal comparison plot
+    plt.style.use('seaborn-v0_8')
+    plt.figure(figsize=(18, 9))
+    
+    # Plot real values
+    plt.scatter(indices_reais, valores_reais, 
+               label='Real Values', alpha=0.6, color='blue', s=40)
+    
+    # Plot predictions for missing data
+    plt.scatter(indices_ausentes, all_predictions_original[indices_ausentes],
+               label='Predictions (Missing Data)', alpha=0.8, color='red', s=40)
+    
+    # Plot predictions for present data
+    plt.scatter(indices_reais, all_predictions_original[indices_reais],
+               label='Predictions (Present Data)', alpha=0.4, color='green', s=40)
+    
+    plt.xlabel('Sample Index', fontsize=12)
+    plt.ylabel(f'Value of {target_var}', fontsize=12)
+    plt.title('Comparison between Real and Predicted Values\n(Highlighting Regions with Missing Data)', fontsize=14)
+    plt.legend()
+    plt.grid(True, linestyle='--', alpha=0.6)
+    
+    # Save plot
+    plot_path = f"{output_dir}/temporal_comparison_plot.png"
+    plt.savefig(plot_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print(f"  Temporal comparison plot saved to: {plot_path}")
+    
+    # Calculate additional metrics for missing data regions
+    if len(indices_ausentes) > 0:
+        missing_predictions = all_predictions_original[indices_ausentes]
+        print(f"  Missing data predictions statistics:")
+        print(f"    Mean: {missing_predictions.mean():.4f}")
+        print(f"    Std: {missing_predictions.std():.4f}")
+        print(f"    Min: {missing_predictions.min():.4f}")
+        print(f"    Max: {missing_predictions.max():.4f}")
+    
+    return {
+        'real_values_count': len(valores_reais),
+        'missing_values_count': len(indices_ausentes),
+        'total_predictions': len(all_predictions_original),
+        'missing_predictions_stats': {
+            'mean': float(missing_predictions.mean()) if len(indices_ausentes) > 0 else 0,
+            'std': float(missing_predictions.std()) if len(indices_ausentes) > 0 else 0,
+            'min': float(missing_predictions.min()) if len(indices_ausentes) > 0 else 0,
+            'max': float(missing_predictions.max()) if len(indices_ausentes) > 0 else 0
+        } if len(indices_ausentes) > 0 else {}
+    }
+
+
 def train_model(model: nn.Module, loaders: Dict[str, DataLoader], 
                 epochs: int, lr: float, patience: int, device: str,
                 output_dir: str = "outputs") -> Dict[str, list]:
@@ -693,11 +800,18 @@ def plot_complete_results(eda_info: Dict, features_info: Dict, history: Dict,
     # Feature selection summary
     selected_features = features_info['selected_features']
     if len(selected_features) > 0:
-        scores = [detail['selection_score'] for detail in features_info['selected_features_details']]
-        axes[0,1].barh(range(len(selected_features)), scores, color='lightgreen')
+        # Check if we have selection scores (automatic selection) or just feature names (manual)
+        if 'selected_features_details' in features_info:
+            scores = [detail['selection_score'] for detail in features_info['selected_features_details']]
+            axes[0,1].barh(range(len(selected_features)), scores, color='lightgreen')
+            axes[0,1].set_xlabel('Selection Score')
+        else:
+            # Manual features - just show feature names
+            axes[0,1].barh(range(len(selected_features)), [1]*len(selected_features), color='lightgreen')
+            axes[0,1].set_xlabel('Manual Selection')
+        
         axes[0,1].set_yticks(range(len(selected_features)))
         axes[0,1].set_yticklabels(selected_features, fontsize=8)
-        axes[0,1].set_xlabel('Selection Score')
         axes[0,1].set_title(f'Selected Features ({len(selected_features)})', fontweight='bold')
         axes[0,1].grid(True, alpha=0.3)
     
@@ -896,6 +1010,11 @@ def main(args):
     print(f"RMSE: {metrics['RMSE']:.4f} [{metrics['RMSE_CI_low']:.4f}, {metrics['RMSE_CI_high']:.4f}]")
     print(f"R²:   {metrics['R2']:.4f}")
     print(f"KS:   {metrics['KS_statistic']:.4f} (p={metrics['KS_pvalue']:.4f})")
+    
+    # GENERATE TEMPORAL COMPARISON PLOT
+    temporal_info = generate_temporal_comparison_plot(
+        model, df, selected_features, args.target, scaler_X, scaler_y, device, args.output
+    )
     
     # SAVE COMPLETE RESULTS
     save_results(metrics, features_info, eda_info, args, args.output)
