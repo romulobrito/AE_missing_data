@@ -1,0 +1,76 @@
+{
+  "dataset_info": {
+    "name": "Sulfatos - Processo Industrial UFRJ",
+    "data_path": "/home/romulo/Downloads/sulfatos_dados_concatenados_formatados_2021.h5",
+    "target_variable": "1251_FIT_801C_2",
+    "description": "Dados de processo químico industrial para análise de reconstrução de variáveis de fluxo"
+  },
+  "features": {
+    "selected_features": [
+      "1251_FIC_801C",
+      "1251_PIT_806C", 
+      "1251_PIT_808C",
+      "1251_FIT_802C",
+      "1251_PDI_807C"
+    ],
+    "selection_criteria": {
+      "min_correlation": 0.5,
+      "max_missing_percentage": 30,
+      "physical_relevance": "Variáveis de processo relacionadas ao controle de fluxo"
+    }
+  },
+  "model_configurations": {
+    "basic": {
+      "description": "Configuração básica baseada no notebook original",
+      "batch": 64,
+      "latent": 16,
+      "dropout": 0.2,
+      "epochs": 100,
+      "lr": 0.001,
+      "patience": 15,
+      "robust_target": false
+    },
+    "robust": {
+      "description": "Configuração robusta para dados com outliers",
+      "batch": 32,
+      "latent": 8,
+      "dropout": 0.3,
+      "epochs": 150,
+      "lr": 0.0005,
+      "patience": 20,
+      "robust_target": true
+    },
+    "high_capacity": {
+      "description": "Configuração de alta capacidade para máxima performance",
+      "batch": 128,
+      "latent": 32,
+      "dropout": 0.1,
+      "epochs": 200,
+      "lr": 0.001,
+      "patience": 25,
+      "robust_target": false
+    },
+    "conservative": {
+      "description": "Configuração conservativa para evitar overfitting",
+      "batch": 16,
+      "latent": 4,
+      "dropout": 0.4,
+      "epochs": 100,
+      "lr": 0.0001,
+      "patience": 10,
+      "robust_target": false
+    }
+  },
+  "evaluation_thresholds": {
+    "excellent_mae_percentage": 5,
+    "good_r2_threshold": 0.85,
+    "distribution_similarity_pvalue": 0.05,
+    "bootstrap_confidence_level": 0.95
+  },
+  "technical_notes": {
+    "preprocessing": "StandardScaler para features, RobustScaler opcional para target",
+    "architecture": "Encoder-Decoder com BatchNorm, LeakyReLU e Dropout",
+    "training": "Early-stopping + ReduceLROnPlateau para estabilidade",
+    "validation": "Split estratificado: 70% treino, 15% validação, 15% teste"
+  }
+} 
