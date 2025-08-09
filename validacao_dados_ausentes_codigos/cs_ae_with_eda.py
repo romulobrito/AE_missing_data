@@ -554,7 +554,7 @@ class EarlyStopping:
 
 def generate_temporal_comparison_plot(model: nn.Module, df: pd.DataFrame, selected_features: List[str], 
                                      target_var: str, scaler_X, scaler_y, device: str, 
-                                     output_dir: str = "outputs"):
+                                     output_dir: str = "outputs", train_feature_means: Optional[pd.Series] = None):
     """
     Generate temporal comparison plot showing real vs predicted values with missing data regions.
     
@@ -572,8 +572,12 @@ def generate_temporal_comparison_plot(model: nn.Module, df: pd.DataFrame, select
     # Prepare all features data
     all_features = df[selected_features].copy()
     
-    # Impute missing values in features using training means
-    train_means = all_features.mean()
+    # Impute missing values in features using TRAINING means (passed in)
+    if train_feature_means is None:
+        print("  Warning: train_feature_means not provided; using global means (may leak).")
+        train_means = all_features.mean()
+    else:
+        train_means = train_feature_means
     all_features_imputed = all_features.fillna(train_means)
     
     if all_features_imputed.isna().sum().sum() > 0:
@@ -862,8 +866,8 @@ def plot_complete_results(eda_info: Dict, features_info: Dict, history: Dict,
     axes[1,1].scatter(y_true, y_pred, alpha=0.6, s=30, edgecolors='k', linewidth=0.5)
     lims = [min(y_true.min(), y_pred.min()), max(y_true.max(), y_pred.max())]
     axes[1,1].plot(lims, lims, 'r--', linewidth=2, alpha=0.8)
-    axes[1,1].set_xlabel('Valuees Reais')
-    axes[1,1].set_ylabel('Valuees Preditos')
+    axes[1,1].set_xlabel('Actual Values')
+    axes[1,1].set_ylabel('Predicted Values')
     axes[1,1].set_title(f'Actual vs Predicted - {target_name}', fontweight='bold')
     axes[1,1].grid(True, alpha=0.3)
     
@@ -872,14 +876,14 @@ def plot_complete_results(eda_info: Dict, features_info: Dict, history: Dict,
     residuals = y_true - y_pred
     axes[2,0].scatter(y_pred, residuals, alpha=0.6, s=30)
     axes[2,0].axhline(y=0, color='r', linestyle='--', alpha=0.8)
-    axes[2,0].set_xlabel('Valuees Preditos')
+    axes[2,0].set_xlabel('Predicted Values')
     axes[2,0].set_ylabel('Residuals')
     axes[2,0].set_title('Residual Analysis', fontweight='bold')
     axes[2,0].grid(True, alpha=0.3)
     
     # Distribution comparison
     axes[2,1].hist(y_true, bins=30, alpha=0.7, label='Actual', density=True, color='blue')
-    axes[2,1].hist(y_pred, bins=30, alpha=0.7, label='Predito', density=True, color='red')
+    axes[2,1].hist(y_pred, bins=30, alpha=0.7, label='Predicted', density=True, color='red')
     axes[2,1].set_xlabel('Value')
     axes[2,1].set_ylabel('Density')
     axes[2,1].set_title('Distribution Comparison', fontweight='bold')
@@ -925,6 +929,12 @@ def main(args):
     # EXPLORATORY DATA ANALYSIS (AED)
     eda_info = perform_eda(df, args.target, args.output)
     
+    # Create a single split of indices FIRST to avoid leakage and to reuse
+    # the same folds for feature selection and model training.
+    all_indices = np.arange(len(df))
+    train_idx, temp_idx = train_test_split(all_indices, test_size=0.3, random_state=args.seed)
+    val_idx, test_idx = train_test_split(temp_idx, test_size=0.5, random_state=args.seed)
+    
     #  AUTOMATIC FEATURE SELECTION
     if args.manual_features:
         # Use manually provided features
@@ -950,9 +960,10 @@ def main(args):
         else:
             raise ValueError("For manual selection, provide --features with features file")
     else:
-        # Automatic selection
+        # Automatic selection ON TRAINING ONLY to avoid leakage
+        df_for_selection = df.iloc[train_idx]
         selected_features, features_info = automatic_feature_selection(
-            df, args.target, 
+            df_for_selection, args.target, 
             min_correlation=args.min_correlation,
             max_missing_pct=args.max_missing_pct,
             min_features=args.min_features,
@@ -970,31 +981,46 @@ def main(args):
     if len(df_model) < 100:
         raise ValueError("Insufficient data after cleaning!")
     
-    # Prepare features and target
-    X = df_model[selected_features].values.astype(np.float32)
-    y = df_model[[args.target]].values.astype(np.float32)
+    # Prepare features and target in original scale
+    X_all = df_model[selected_features]
+    y_all = df_model[[args.target]]
     
-    print(f"Final dimensions: X={X.shape}, y={y.shape}")
+    # Reuse the SAME split indices, intersecting with rows available after dropna
+    train_idx_model = [i for i in train_idx if i in df_model.index]
+    val_idx_model = [i for i in val_idx if i in df_model.index]
+    test_idx_model = [i for i in test_idx if i in df_model.index]
     
-    # Normalization
+    # Fallback: if any split is empty after dropna, resplit within df_model indices
+    if (len(train_idx_model) == 0) or (len(val_idx_model) == 0) or (len(test_idx_model) == 0):
+        print(" WARNING: Original fold intersection produced empty split after dropna. Resplitting within available rows.")
+        available_idx = list(df_model.index)
+        if len(available_idx) < 10:
+            raise ValueError("Too few samples available after dropna to create splits.")
+        train_idx_model, temp_idx_model = train_test_split(available_idx, test_size=0.3, random_state=args.seed)
+        val_idx_model, test_idx_model = train_test_split(temp_idx_model, test_size=0.5, random_state=args.seed)
+    
+    X_train_raw = X_all.loc[train_idx_model].values.astype(np.float32)
+    X_val_raw   = X_all.loc[val_idx_model].values.astype(np.float32)
+    X_test_raw  = X_all.loc[test_idx_model].values.astype(np.float32)
+    y_train_raw = y_all.loc[train_idx_model].values.astype(np.float32)
+    y_val_raw   = y_all.loc[val_idx_model].values.astype(np.float32)
+    y_test_raw  = y_all.loc[test_idx_model].values.astype(np.float32)
+    
+    print(f"Final dimensions: X_train={X_train_raw.shape}, X_val={X_val_raw.shape}, X_test={X_test_raw.shape}")
+    
+    # Compute training feature means (original scale) for later imputations
+    train_feature_means = pd.Series(X_train_raw.mean(axis=0), index=selected_features)
+    
+    # Scaling: fit on training only, transform val/test
     scaler_X = StandardScaler()
-    X_scaled = scaler_X.fit_transform(X)
+    X_train = scaler_X.fit_transform(X_train_raw).astype(np.float32)
+    X_val = scaler_X.transform(X_val_raw).astype(np.float32)
+    X_test = scaler_X.transform(X_test_raw).astype(np.float32)
     
     scaler_y = RobustScaler() if args.robust_target else StandardScaler()
-    y_scaled = scaler_y.fit_transform(y)
-    
-    # Split data
-    X_train, X_temp, y_train, y_temp = train_test_split(
-        X_scaled, y_scaled, test_size=0.3, random_state=args.seed
-    )
-    X_val, X_test, y_val, y_test = train_test_split(
-        X_temp, y_temp, test_size=0.5, random_state=args.seed
-    )
-    
-    print(f" Split data:")
-    print(f"  Training: {len(X_train)} samples")
-    print(f"  Validation: {len(X_val)} samples") 
-    print(f"  Test: {len(X_test)} samples")
+    y_train = scaler_y.fit_transform(y_train_raw).astype(np.float32)
+    y_val = scaler_y.transform(y_val_raw).astype(np.float32)
+    y_test = scaler_y.transform(y_test_raw).astype(np.float32)
     
     # DataLoaders
     loaders = {
@@ -1044,9 +1070,9 @@ def main(args):
     print(f"R²:   {metrics['R2']:.4f}")
     print(f"KS:   {metrics['KS_statistic']:.4f} (p={metrics['KS_pvalue']:.4f})")
     
-    # GENERATE TEMPORAL COMPARISON PLOT
+    # GENERATE TEMPORAL COMPARISON PLOT (impute with training-only means)
     temporal_info = generate_temporal_comparison_plot(
-        model, df, selected_features, args.target, scaler_X, scaler_y, device, args.output
+        model, df, selected_features, args.target, scaler_X, scaler_y, device, args.output, train_feature_means
     )
     
     # SAVE COMPLETE RESULTS

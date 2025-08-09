@@ -549,7 +549,7 @@ def reconstruct_data_original_style(model: nn.Module, X_missing: pd.DataFrame,
             else:
                 # Fallback: use global median (not ideal, but better than test mean)
                 fill_value = X_imputed[col].median()
-                print(f"⚠️  Fallback: Imputing '{col}' with global median: {fill_value:.4f}")
+                print(f"WARNING: Fallback imputation for '{col}' using global median: {fill_value:.4f}")
             
             X_imputed[col].fillna(fill_value, inplace=True)
     
@@ -903,13 +903,9 @@ def main(args):
         print(" Too few complete records for reliable testing!")
         return
     
-    # Apply physical filter (remove extreme outliers)
-    target_values = df_complete[target_var]
-    q1, q3 = target_values.quantile([0.01, 0.99])  # Use 1% and 99% percentiles
-    mask_fisico = (target_values >= q1) & (target_values <= q3)
-    df_complete = df_complete[mask_fisico]
-    
-    print(f"After physical filter: {len(df_complete)} records")
+    # NOTE: Physical filter thresholds will be computed on TRAINING only (after split)
+    # to avoid data leakage. Thresholds will then be applied to val/test using the
+    # same values derived from training data.
     
     # Separate features and target 
     X = df_complete[features]
@@ -932,9 +928,19 @@ def main(args):
         random_state=args.seed
     )
     
-    print(f"Training samples: {len(X_train)}")
-    print(f"Validation samples: {len(X_val)}")
-    print(f"Test samples: {len(X_test)}")
+    # Apply physical filter using TRAINING thresholds only (no leakage)
+    q1, q3 = y_train.quantile([0.01, 0.99])
+    def apply_physical_filter(X_df: pd.DataFrame, y_series: pd.Series) -> Tuple[pd.DataFrame, pd.Series]:
+        mask = (y_series >= q1) & (y_series <= q3)
+        return X_df[mask], y_series[mask]
+    
+    X_train, y_train = apply_physical_filter(X_train, y_train)
+    X_val, y_val = apply_physical_filter(X_val, y_val)
+    X_test, y_test = apply_physical_filter(X_test, y_test)
+    
+    print(f"Training samples (after physical filter): {len(X_train)}")
+    print(f"Validation samples (after physical filter): {len(X_val)}")
+    print(f"Test samples (after physical filter): {len(X_test)}")
     
     # Scaling (FIT only on training)
     scaler_X = StandardScaler()
