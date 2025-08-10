@@ -267,12 +267,20 @@ def automatic_feature_selection(df: pd.DataFrame, target_var: str,
     
     os.makedirs(output_dir, exist_ok=True)
     
-    # Calculate correlation matrix
-    correlation_matrix = df.corr()
+    # Use only numeric columns to compute correlation (avoid categorical errors)
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    if target_var not in numeric_cols:
+        raise ValueError(
+            f"Target variable '{target_var}' is not numeric or not present among numeric columns."
+        )
+    df_num = df[numeric_cols]
+    
+    # Calculate correlation matrix on numeric subset only
+    correlation_matrix = df_num.corr()
     target_correlations = correlation_matrix[target_var].abs().sort_values(ascending=False)
     
-    # Analyze completeness
-    missing_pct = (df.isnull().sum() / len(df)) * 100
+    # Analyze completeness (numeric features only)
+    missing_pct = (df_num.isnull().sum() / len(df_num)) * 100
     
     # Selection criteria
     print(f" Selection criteria:")
@@ -280,10 +288,10 @@ def automatic_feature_selection(df: pd.DataFrame, target_var: str,
     print(f"  • Maximum missing data: {max_missing_pct:.1f}%")
     print(f"  • Number of features: {min_features}-{max_features}")
     
-    # Analyze each candidate feature
+    # Analyze each candidate feature (numeric only)
     feature_analysis = []
     
-    for feature in df.columns:
+    for feature in df_num.columns:
         if feature == target_var:
             continue
             
@@ -366,7 +374,7 @@ def automatic_feature_selection(df: pd.DataFrame, target_var: str,
     axes[0,1].set_title('Top Features by Selection Score')
     axes[0,1].grid(True, alpha=0.3)
     
-    #  Correlation matrix of selected features
+    #  Correlation matrix of selected features (numeric only)
     if len(selected_features) > 1:
         selected_corr = correlation_matrix.loc[selected_features + [target_var], selected_features + [target_var]]
         im = axes[1,0].imshow(selected_corr, cmap='coolwarm', vmin=-1, vmax=1)
@@ -392,7 +400,7 @@ def automatic_feature_selection(df: pd.DataFrame, target_var: str,
     stats_text = f"""
 SELECTION STATISTICS:
 
-Total variables: {len(df.columns)-1}
+Total variables: {len(df_num.columns)-1}
 Features analyzed: {len(df_analysis)}
 Meet correlation: {(df_analysis['meets_correlation']).sum()}
 Meet completeness: {(df_analysis['meets_completeness']).sum()}
@@ -930,7 +938,6 @@ def main(args):
     eda_info = perform_eda(df, args.target, args.output)
     
     # Create a single split of indices FIRST to avoid leakage and to reuse
-    # the same folds for feature selection and model training.
     all_indices = np.arange(len(df))
     train_idx, temp_idx = train_test_split(all_indices, test_size=0.3, random_state=args.seed)
     val_idx, test_idx = train_test_split(temp_idx, test_size=0.5, random_state=args.seed)
