@@ -989,6 +989,11 @@ def main(args):
         joblib.dump(scaler_X, f"{sub_output}/scaler_X.joblib")
         joblib.dump(scaler_y, f"{sub_output}/scaler_y.joblib")
 
+        # Save raw predictions for post-hoc band-restricted analysis
+        np.save(f"{sub_output}/y_true_missing.npy", y_true_missing)
+        np.save(f"{sub_output}/y_pred_missing.npy", y_pred_missing)
+        np.save(f"{sub_output}/y_train_raw.npy", y_train_raw.flatten())
+
         # Save results
         config = {
             'mechanism': args.mechanism,

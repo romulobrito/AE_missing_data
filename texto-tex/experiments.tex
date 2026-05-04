@@ -1,0 +1,67 @@
+\section{Experiments}\label{sec:experiments}
+
+% Colored observations require xcolor package (should be in main document preamble)
+% If xcolor is not loaded, uncomment the line below:
+% \usepackage{xcolor}
+
+\subsection{Experimental Protocol}\label{sec:protocol_exp}
+We evaluate the CDAE pipeline in two phases using the leakage-safe protocol from \S\ref{sec:protocol}. \textbf{Phase~1} (industrial application) trains on real plant data with train-only preprocessing and reports held-out performance. \textbf{Phase~2} (mechanism-aware validation) injects artificial missingness only in the \emph{test} target under MCAR, MAR, and MNAR at an 80\% masking rate, and evaluates reconstruction only on masked indices. All metrics are reported with 95\% bootstrap confidence intervals (B=1000 resamples) computed on masked indices, as defined in \eqref{eq:bootstrap-ci}. Detailed mask-generation pseudo-code is provided in Appendix~\ref{sec:mask-algos}.
+
+This section defines how empirical evidence is organized across experiments. To avoid fragmented discussion and repeated tables, we separate reporting scope from interpretation: here we specify fairness conditions, evaluation checkpoints, and reporting conventions, while Sec.~\ref{sec:results} consolidates the substantive reading of the results. This organization keeps the experimental design explicit without diluting the main argument.
+
+\subsection{Reporting Conventions and Scope}\label{sec:reporting_scope}
+This section reports protocol choices and core quantitative checkpoints; the broader interpretation is centralized in Sec.~\ref{sec:results}. For clarity and consistency:
+\begin{enumerate}
+    \item \textbf{Metric direction.} In all tables, $\downarrow$ means lower is better and $\uparrow$ means higher is better.
+    \item \textbf{Task naming.} We refer to the target reconstruction task as \emph{imputation} (virtual sensing under missing target), not generic forecasting.
+    \item \textbf{Ablation fairness.} In the $\lambda$ ablation, CDAE variants share the same architecture, preprocessing, temporal split, and early-stopping policy; only the loss weighting changes.
+    \item \textbf{Protocol interpretation.} Blocked temporal splits evaluate extrapolation to future operating periods and can expose distribution shift.
+    \item \textbf{$\lambda$ scope.} The current ablation covers $\lambda\in\{0,1\}$; broader sweeps are left for future work.
+\end{enumerate}
+Together, these conventions ensure that all reported comparisons answer the same operational question. They prevent conflating generic reconstruction with the virtual-sensing regime studied here and make explicit which quantities can be compared directly across phases, mechanisms, and ablation settings.
+
+\subsection{Phase 1: Industrial Application Results}\label{sec:phase1}
+For the primary target \texttt{1251\_FIT\_801C\_2}, this phase enforces train-only checkpoints before model reporting: adaptive head-skip safeguards (coverage $\ge 20\%$ and at least $10{,}000$ observed targets) and feature-screening thresholds (correlation $\ge 0.3$, completeness $\ge 70\%$).
+
+Quantitative outcomes for these checkpoints (selected skip fraction, retained auxiliaries, and held-out metrics) are centralized in Sec.~\ref{sec:results} (Fig.~\ref{fig:phase1} and \S\ref{sec:phase1-feature-selection}).
+The scientific role of Phase~1 is to establish that the target is reconstructable under a fully leakage-safe industrial pipeline before controlled masking is introduced. In practical terms, it verifies that auxiliaries selected from training data alone contain enough information to support credible virtual sensing on a held-out future segment.
+
+\subsection{Phase 2: Mechanism-Aware Controlled Validation}\label{sec:phase2}
+
+We inject 80\% artificial missingness on the \emph{test} target under MCAR, MAR, and MNAR mechanisms and evaluate reconstruction only on masked indices. To keep a single source of Phase~2 metrics, mechanism-wise checkpoints (MAE, RMSE, $R^2$, KS, and Shapiro) are centralized in Table~\ref{tab:controlled-80} (Sec.~\ref{sec:results}), with diagnostic interpretation consolidated in \ref{app:extended-diagnostics}. Algorithmic details of mechanism simulation are reported in Appendix~\ref{sec:mask-algos}.
+The purpose of Phase~2 is not to re-establish global predictive accuracy, but to stress the trained reconstruction framework under controlled missingness regimes that mimic distinct operational failure patterns. By restricting intervention to the test target and scoring to masked indices, this phase isolates the part of performance that is genuinely deployment-relevant.
+
+\subsection{Distributional Diagnostics and Regime-Specific Analysis}\label{sec:diagnostics}
+
+Distributional diagnostics are defined only on masked indices $\mathcal{M}$, consistent with deployment-aligned scoring: Kolmogorov--Smirnov for observed-versus-reconstructed distributions and Shapiro--Wilk for residual normality. Numerical outcomes and mechanism-wise interpretation are centralized in Sec.~\ref{sec:results} and consolidated in \ref{app:extended-diagnostics}.
+These diagnostics complement pointwise error metrics by testing whether strong aggregate accuracy is accompanied by acceptable distributional fidelity and residual structure. This is especially important in multi-regime industrial signals, where small average errors can coexist with systematic bias in sparse but operationally critical regions.
+
+\subsection{Downstream Operational Impact}\label{sec:downstream}
+
+To assess whether reconstruction improvements translate into operational value, we run a downstream alert pipeline with threshold calibration on training data only and additional target masking on the test fold (protocol in \S\ref{sec:controlled}). The virtual sensor yields PR-AUC from $\downstreamPRAUCBaseline$ to $\downstreamPRAUC$ and precision at 80\% recall from $\downstreamPrecisionAtRecallBaseline$ to $\downstreamPrecisionAtRecall$. Full protocol details and operational interpretation are reported in \ref{app:downstream-details}.
+This downstream block tests whether reconstruction quality translates into actionable utility, rather than remaining a purely numerical gain. It is interpreted as an application-layer extension of the main protocol, not as a separate learning objective.
+
+
+\subsection{Ablation Study: Mask-Weighted Loss}\label{sec:ablation}
+% \textcolor{green}{\textbf{[OBS: COMPLETO]}} \textcolor{green}{Experimentos executados com \texttt{--masked\_weight 0.0} para MCAR, MAR e MNAR. Resultados em \texttt{testes/ablation\_lambda0/}. Valores atualizados nas macros.}
+
+We evaluate the effect of mask-weighted loss by comparing the default CDAE ($\lambda=1$) with a variant that uses standard MSE ($\lambda=0$). The $\lambda=1$ setting was originally chosen to increase the gradient contribution of masked targets (\eqref{eq:cdae-loss}). Both variants share the same architecture, preprocessing, temporal split, and early-stopping setup; only loss weighting changes. Appendix Table~\ref{tab:ablation} reports the full masked-index results at $r=0.8$.
+Accordingly, this ablation should be read as a controlled test of training emphasis rather than as a comparison between different model families. The objective is to determine whether prioritizing hidden-target samples improves deployment-relevant behavior, even when global masked-index error is not necessarily minimized.
+
+Appendix Table~\ref{tab:ablation} provides the controlled comparison between $\lambda=1$ and $\lambda=0$ under identical settings. Detailed mechanism-wise interpretation is centralized in Sec.~\ref{sec:results}.
+
+
+\subsection{Comparison with Baseline Imputation}\label{sec:baseline}
+
+To contextualize CDAE performance, we compare against KNN-Imputer \cite{pedregosa2011scikit}, a widely-used baseline that imputes missing values using the $k$ nearest neighbors in feature space. This choice is motivated by three practical reasons: (i) nearest-neighbor imputation is a common reference in industrial missing-data workflows and process-data studies \cite{carbery2022missingness, pirehgalin2018estimation, zhang2024missing}; (ii) KNN is nonparametric and transparent, providing a conservative, interpretable baseline before higher-capacity deep models; and (iii) the implementation is stable and fully reproducible in standard toolchains. We apply the \emph{same} leakage-safe protocol: split-first, train-only preprocessing (feature selection, imputation statistics, and scalers fit on train only), and evaluation \emph{only on masked indices} under MCAR, MAR, and MNAR at $r=0.8$. KNN-Imputer uses $k=5$ neighbors (default setting, kept fixed to avoid additional tuning leakage) and is fit on the training fold after train-only feature selection and scaling. Appendix Table~\ref{tab:baseline_comparison} reports the full results.
+
+Appendix Table~\ref{tab:baseline_comparison} summarizes the unified masked-index comparison under the same leakage-safe protocol for all methods. Mechanism-wise interpretation and robustness discussion are consolidated in Sec.~\ref{sec:results} and \ref{app:baseline-extra}.
+
+\subsection{Generalization to Secondary Target}\label{sec:generalization}
+% \textcolor{green}{\textbf{[NOTE: COMPLETE]}} \textcolor{green}{Secondary target \texttt{1251\_FIT\_801B\_2} executed and values ​​extracted. Results in \texttt{complementary\results/1251\_FIT\_801B\_2/methodological\validation/}. Values ​​updated in macros.}
+
+To evaluate whether the methodology transfers beyond the primary target, we replicate the entire leakage-safe pipeline on a secondary variable \texttt{1251\_FIT\_801B\_2} (75.7\% naturally missing). The CDAE is retrained from scratch with independent train-only feature screening, imputation statistics, and scalers. Appendix Table~\ref{tab:generalization} presents the resulting checkpoints under controlled 80\% masking for all three mechanisms.
+
+Appendix Table~\ref{tab:generalization} reports secondary-target checkpoints under the same leakage-safe workflow after full retraining. Detailed mechanism-wise interpretation is provided in Sec.~\ref{sec:results}.
+
+Taken together, this reporting structure keeps empirical claims tightly aligned with the central question of the paper. Phase~1 establishes feasibility under leakage-safe training, Phase~2 probes robustness under controlled missingness, distributional diagnostics examine regime-level behavior, downstream analysis tests operational utility, ablation clarifies the effect of mask-weighted optimization, baseline comparison contextualizes gains against a standard imputation reference, and secondary-target transfer checks methodological portability.

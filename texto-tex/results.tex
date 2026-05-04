@@ -1,0 +1,222 @@
+\section{Results and Analysis}\label{sec:results}
+
+We report results in two stages aligned with the methodology: Phase~1 (industrial application on real data) and Phase~2 (controlled mechanism-aware validation). Values in square brackets denote 95\% bootstrap confidence intervals. Unless otherwise stated, controlled-validation results correspond to the default CDAE with $\lambda=1$; the $\lambda=0$ variant is discussed in \S\ref{sec:ablation}.
+
+This section presents empirical evidence in the same order as the methodological argument in Sec.~\ref{sec:method}. We first verify that controlled masking behaves as intended, then report leakage-safe reconstruction on the industrial chronological split, and finally examine robustness, distributional fidelity, regime-specific bias, and operational alerting value. The claims therefore rely on a sequence of complementary checks, not on a single aggregate metric.
+
+Target values are reported in engineering units (EU) of \texttt{1251\_FIT\_801C\_2}. Temporal plots use three aliases in addition to colors: \textsc{Obs} (observed target), \textsc{Pred-Obs} (prediction at observed indices), and \textsc{Imp-Miss} (imputation at missing indices), improving readability in grayscale.
+
+\subsection{Temporal context and motivation for mechanism tests}
+A temporal audit of the full observation window (Fig.~\ref{fig:temporal_missing_patterns}) shows nonstationary availability patterns that motivate mechanism-aware evaluation. Missingness peaks during operational hours 12--16 (81.5\% versus a 79.3\% baseline), rises on weekends (81.5\% on Sundays versus 79.1\% on Wednesdays), and then shifts to a markedly better-availability regime in the final quarter of the window.
+
+These signatures suggest that real missingness is not purely MCAR. Still, the true mechanism is uncertain because target values are unobserved exactly when missing and outages may combine multiple causes. We therefore evaluate MCAR, MAR, and MNAR to assess sensitivity under alternative assumptions, not to claim a single mechanism in practice.
+
+Very long stretches with near-complete absence can reflect sensor unavailability (e.g., commissioning/failure periods), not only value-driven missingness. Mechanism interpretation is therefore suggestive, and controlled masking is used to isolate algorithmic behavior.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\linewidth]{figs/temporal_missing_patterns.png}
+    \caption{Temporal structure of target availability (diurnal profile, day-of-week profile, and full-window timeline). These descriptive patterns motivate MAR/MNAR stress tests but are not used for model selection or preprocessing choices.}
+    \label{fig:temporal_missing_patterns}
+\end{figure}
+
+The plausibility of the simulated mechanisms is consistent with plant behavior. The target shows a narrow low-flow mode (0--5~EU) and a broad high-flow mode (55--75~EU). The key auxiliary \texttt{1251\_FIC\_801C} mirrors this structure, supporting a MAR design that emphasizes auxiliary extremes (\eqref{eq:mar-allocation}). High-load outage concentration is also compatible with an MNAR stress test (\eqref{eq:mnar-prob}). Appendix Fig.~\ref{fig:comparison_real_vs_simulated} contrasts empirical and simulated patterns, and the corresponding mask-allocation pseudo-code is provided in Appendix~\ref{sec:mask-algos}.
+
+Table~\ref{tab:missing-data} summarizes the behavior represented by each mechanism and its industrial interpretation.
+
+
+\begin{table}[ht]
+\centering
+\caption{Missing-data mechanism characteristics (simulation view)}\label{tab:missing-data}
+\begin{adjustbox}{width=\columnwidth,center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{2.5cm}>{\raggedright\arraybackslash}p{4cm}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{4.3cm}@{}}
+\toprule
+\textbf{Mechanism} & \textbf{Pattern} & \textbf{Definition} & \textbf{Industrial relevance} \\
+\midrule
+MCAR & Uniform over target range & $P(M{=}1) \,{=}\, \rho$ & Random dropouts and logging faults \\
+MAR & Concentrated at auxiliary extremes & $P(M{=}1\mid X)$ high for $X\le Q_1$ or $X\ge Q_3$ & Condition-driven outages at process extremes \\
+MNAR & Increases with target level & $P(M{=}1\mid Y) \propto Y^2$ & High-flow saturation and stress-related failures \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+\subsection{Validation of masking mechanisms}
+Mask-generation diagnostics confirm the intended behavior of the three controlled mechanisms. Under MCAR, removal frequency is approximately uniform over the test fold. Under MAR, removed indices concentrate at auxiliary extremes while remaining target-independent conditional on the auxiliary. Under MNAR, masking probability increases with target magnitude according to \eqref{eq:mnar-prob}. All checks are performed on masked test positions only, following the leakage-safe split-first protocol described in \S\ref{sec:controlled}. Implementation details for these diagnostics and mask construction are reported in Appendix~\ref{sec:mask-algos}.
+Taken together, these checks show that synthetic masking is a controlled intervention, not an arbitrary perturbation. This validation is necessary so that later performance differences can be interpreted as responses to the intended mechanism rather than artifacts of mask construction.
+
+\subsection{Phase 1: industrial application (train-only pipeline)}
+On the held-out test fold, the CDAE trained with train-only preprocessing reaches $R^2=\phaseOneRtwo$, MAE=\phaseOneMAE [\phaseOneMAECIlow, \phaseOneMAECIhigh], and RMSE=\phaseOneRMSE [\phaseOneRMSECIlow, \phaseOneRMSECIhigh] ($n=\phaseOneN$). The adaptive head-skip selected $s^*=0.361$, meeting the train-coverage criteria defined in Sec.~\ref{sec:protocol}. Figure~\ref{fig:phase1} summarizes training dynamics and held-out diagnostics.
+This result establishes the baseline for the rest of the section. Even with strict chronology and train-only preprocessing, auxiliaries selected from past data contain enough information to support credible virtual sensing on a future segment.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{figs/complete_pipeline_results.png}
+  \caption{Phase~1 (industrial pipeline, train-only statistics). Training history and held-out test diagnostics for the CDAE: parity plot, residuals, and marginal distributions.}
+  \label{fig:phase1}
+\end{figure}
+
+A temporal view of the same Phase~1 run is provided in Appendix Fig.~\ref{fig:temporal_comparison_phase1}. It reinforces the operational gap between predictions at observed points and imputations over long missing stretches, which motivates controlled masking in Phase~2.
+
+\paragraph{Feature-screening outcome (Phase~1).}\label{sec:phase1-feature-selection}
+The feature-screening procedure itself is defined in the methodology; here we retain only the main outcome. Train-only screening retained 10 auxiliaries from 140 candidates, balancing association and completeness; detailed diagnostics and the full ranked list are moved to Appendix Fig.~\ref{fig:feature_selection_analysis} and Appendix Table~\ref{tab:selected_features_target}. The selected set includes flow, pressure, differential-pressure, and temperature signals from the same process unit. The top-ranked auxiliary is \texttt{1251\_FIC\_801C} ($\rho=0.991$, 100\% completeness), which is physically plausible and provides strong redundant support for reconstruction.
+
+Having established this leakage-safe baseline, we next ask a narrower deployment question: how does the same framework behave when the test target is suppressed under different missingness mechanisms and performance is scored only where the target is hidden?
+
+\subsection{Phase 2: controlled validation (80\% target masking on test)}
+Table~\ref{tab:controlled-80} reports MAE, RMSE, $R^2$, KS, and Shapiro diagnostics under 80\% masking applied only to the test target.
+
+\begin{table}[!t]
+\centering
+\caption{Performance on \emph{masked indices} with 80\% target masking on the test fold. Metrics follow \eqref{eq:mae}--\eqref{eq:r2} with 95\% bootstrap CIs; KS and Shapiro report $p$-values. All metrics computed exclusively on masked indices.}
+\label{tab:controlled-80}
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{lcccccc}
+\toprule
+Mechanism & $n$ & MAE [95\% CI] & RMSE [95\% CI] & $R^2$ & KS $p$ & Shapiro $p$ \\
+\midrule
+MCAR & \mcarN & \mcarMAE\ [\mcarMAECIlow, \mcarMAECIhigh] & \mcarRMSE\ [\mcarRMSECIlow, \mcarRMSECIhigh] & \mcarRtwo & \mcarKS & \mcarShapiro \\
+MAR  & \marN  & \marMAE\ [\marMAECIlow, \marMAECIhigh]  & \marRMSE\ [\marRMSECIlow, \marRMSECIhigh]  & \marRtwo  & \marKS  & \marShapiro \\
+MNAR & \mnarN & \mnarMAE\ [\mnarMAECIlow, \mnarMAECIhigh] & \mnarRMSE\ [\mnarRMSECIlow, \mnarRMSECIhigh] & \mnarRtwo & \mnarKS & \mnarShapiro \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+It is important to emphasize that these scores are computed only on masked target indices. They therefore measure reconstruction quality exactly where the signal is unavailable at inference time, rather than averaging over observed and missing cases.
+
+The contrast across mechanisms is informative. Under MCAR and MAR, the CDAE retains strong reconstruction quality, indicating that auxiliaries still provide enough structure for recovery even under heavy target suppression. Under MNAR, performance degrades substantially, as expected: when missingness depends on the target itself, removed samples are no longer neutral relative to the signal distribution, and reconstruction becomes harder under temporal distribution shift.
+
+Detailed MCAR and MAR diagnostic panels for the same Phase~2 experiment are reported in Appendix Figs.~\ref{fig:controlled_test_results_MCAR} and \ref{fig:controlled_test_results_MAR}. Figure~\ref{fig:controlled_test_results_MNAR} is kept in the main text because MNAR is the hardest mechanism and concentrates the most informative degradation pattern.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{figs/controlled_test_results_MNAR.png}
+  \caption{MNAR--80\% (diagnostics). Same diagnostic layout under the most challenging mechanism (\eqref{eq:mnar-prob}); supplementary MCAR/MAR panels appear in Appendix Figs.~\ref{fig:controlled_test_results_MCAR} and \ref{fig:controlled_test_results_MAR}.}
+  \label{fig:controlled_test_results_MNAR}
+\end{figure}
+
+Appendix Figs.~\ref{fig:mcar80} and \ref{fig:mar80} provide temporal zooms for MCAR and MAR. Figure~\ref{fig:mnar80} keeps the corresponding MNAR window in the main text, highlighting the hardest-case departures while preserving a compact narrative.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.72\linewidth]{figs/MNAR_80_temporal_missing_focus.png}
+  \caption{MNAR--80\% temporal comparison on masked indices for the hardest Phase~2 case. Series aliases are \textsc{Obs} (ground truth at masked positions) and \textsc{Imp-Miss} (CDAE reconstruction using \eqref{eq:recon-test}); supplementary MCAR/MAR zooms are reported in Appendix Figs.~\ref{fig:mcar80} and \ref{fig:mar80}.}
+  \label{fig:mnar80}
+\end{figure}
+
+
+\subsection{Distributional and residual diagnostics}
+Kolmogorov--Smirnov tests indicate significant distributional gaps across all mechanisms (MCAR: $p=\mcarKS$; MAR: $p=\marKS$; MNAR: $p=\mnarKS$), with $D$ between $0.38$ (MAR) and $0.40$ (MNAR). Shapiro--Wilk also rejects residual normality in all mechanisms (MCAR: $p=\mcarShapiro$; MAR: $p=\marShapiro$; MNAR: $p=\mnarShapiro$), which is consistent with heteroscedastic and regime-dependent errors. As in all Phase~2 metrics, diagnostics are computed only on masked indices $\mathcal{M}$, and uncertainty follows the bootstrap intervals in \eqref{eq:bootstrap-ci}.
+
+These findings should be read with care. Rejection of exact distributional equality or residual normality does not mean the reconstructions are unusable; it means that pointwise accuracy coexists with residual structure and regime-dependent mismatch.
+
+Even with these gaps, reconstructed distributions retain the main bimodal structure (Fig.~\ref{fig:controlled_test_results_MNAR}; Appendix Figs.~\ref{fig:controlled_test_results_MCAR} and \ref{fig:controlled_test_results_MAR}). This is an important result: the model is not only minimizing average error around the dominant mode, but recovering the broader multi-regime pattern of the target, although with remaining discrepancies in mode density and spread.
+
+\subsection{Bias in the low-density band (0--20)}\label{sec:bias-analysis}
+This regime-focused analysis is one of the central results of the paper. The key question is not only which configuration minimizes global masked-index error, but which one behaves more credibly in the sparse operating band where systematic overestimation is most consequential.
+
+Across MCAR and MAR, reconstructions in the 0--20~EU band show a consistent positive bias when evaluation is restricted to masked indices $\mathcal{M}$ (cardinality in \eqref{eq:mask-size}).
+
+Following the evaluation scope in Sec.~\ref{sec:controlled}, band-restricted metrics are computed only on masked indices whose true target lies in $[0,20]$~EU. We also report the corresponding training-share for this interval to contextualize density effects.
+
+\paragraph{Band-restricted results under $\lambda{=}1$.}
+Table~\ref{tab:bias-band} quantifies the metrics computed post-hoc on the same Phase~2 runs reported in Table~\ref{tab:controlled-80}.
+
+\begin{table}[ht]
+\centering
+\caption{Band-restricted metrics on masked indices in $[0,20]$~EU. Top panel: default $\lambda{=}1$; bottom panel: ablation $\lambda{=}0$ (same splits, seed, and mask). Bootstrap 95\% CIs via \eqref{eq:bootstrap-ci} ($B{=}2000$). MNAR retains only one masked sample in this band because \eqref{eq:mnar-prob} concentrates masking on high target values. $\Delta$Bias is the paired sample-wise difference $\lambda{=}0$ minus $\lambda{=}1$ (positive means $\lambda{=}0$ is worse).}
+\label{tab:bias-band}
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Variant} & \textbf{Mech.} & \textbf{$\mathrm{Bias}_{[0,20]}$ [95\% CI]} & \textbf{$\mathrm{MAE}_{[0,20]}$ [95\% CI]} & \textbf{$\mathrm{ShareTrain}$ (\%)} & $|\mathcal{J}_{[0,20]}|$ \\
+\midrule
+\multirow{3}{*}{$\lambda{=}1$}
+ & MCAR & $+2.04$\ [$+1.75$, $+2.24$] & $2.34$\ [$2.21$, $2.52$] & 23.2 & 127 \\
+ & MAR  & $+2.01$\ [$+1.68$, $+2.26$] & $2.39$\ [$2.24$, $2.58$] & 23.2 & 123 \\
+ & MNAR & \multicolumn{2}{c}{$n{=}1$ (degenerate; see text)} & 23.2 & 1 \\
+\midrule
+\multirow{3}{*}{$\lambda{=}0$}
+ & MCAR & $+2.49$\ [$+2.18$, $+2.72$] & $2.76$\ [$2.61$, $2.95$] & 23.2 & 127 \\
+ & MAR  & $+2.44$\ [$+2.10$, $+2.71$] & $2.79$\ [$2.63$, $2.99$] & 23.2 & 123 \\
+ & MNAR & \multicolumn{2}{c}{$n{=}1$ (degenerate)} & 23.2 & 1 \\
+\midrule
+\multicolumn{2}{l}{\textbf{$\Delta$Bias ($\lambda{=}0 - \lambda{=}1$)}}  \\
+ & MCAR & $+0.45$\ [$+0.39$, $+0.52$] & $+0.42$\ [$+0.35$, $+0.49$] & --- & --- \\
+ & MAR  & $+0.43$\ [$+0.37$, $+0.50$] & $+0.40$\ [$+0.33$, $+0.47$] & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\end{table}
+
+Under MCAR and MAR at $r{=}0.8$, the band-restricted bias with $\lambda{=}1$ is $+2.04$ and $+2.01$~EU respectively, confirming the conservative overestimation visible in Appendix Figs.~\ref{fig:controlled_test_results_MCAR} and \ref{fig:controlled_test_results_MAR} (points in $[0,20]$ above the diagonal) and the positive-residual concentration in the same range. Appendix Figs.~\ref{fig:mcar80} and \ref{fig:mar80} reinforce this pattern with temporal zooms. The band contains only ${\approx}\,5\%$ of masked test samples ($|\mathcal{J}_{[0,20]}|{=}127$ for MCAR, 123 for MAR) despite $\mathrm{ShareTrain}_{[0,20]}{=}23.2\%$, indicating that the low-flow regime is particularly sparse in the test fold. Under MNAR, \eqref{eq:mnar-prob} concentrates masking on high target values, leaving only a single sample in $[0,20]$; band-restricted metrics are therefore degenerate for this mechanism.
+
+\paragraph{Loss-weighting effect on band bias.}
+The ablation study (\S\ref{sec:ablation}) shows that $\lambda{=}0$ improves \emph{global} masked-index MAE by 17--19\%. A natural question is whether this global improvement extends to the low-flow band. Table~\ref{tab:bias-band} provides a direct answer: it does not. Under $\lambda{=}0$, the band-restricted bias \emph{increases} from $+2.04$ to $+2.49$~EU (MCAR) and from $+2.01$ to $+2.44$~EU (MAR). Paired bootstrap tests on the same $n{=}127$ (MCAR) and $n{=}123$ (MAR) masked samples confirm that the difference is significant: the 95\% CI of the paired bias difference excludes zero ($+0.45$~[$+0.39$, $+0.52$] for MCAR; $+0.43$~[$+0.37$, $+0.50$] for MAR; $P(\Delta{>}0){=}100\%$ in both cases, $B{=}5000$).
+
+This reveals a regime-specific trade-off between the two loss variants:
+\begin{itemize}
+  \item $\lambda{=}0$ optimizes the \emph{global} loss landscape, which is dominated by the high-flow mode (${\approx}\,55$--$75$~EU); calibration in $[0,20]$ is neglected because this band contributes little to the overall gradient.
+  \item $\lambda{=}1$ amplifies gradients from masked targets during training, which implicitly acts as importance weighting for the reconstruction task. This extra gradient pressure benefits the sparse low-flow regime, reducing bias by ${\approx}\,0.4$~EU at the expense of global MAE.
+\end{itemize}
+
+The ablation therefore reveals a real trade-off rather than a single winner. If the only objective is global masked-index accuracy, $\lambda{=}0$ can be preferable; if the objective is to reduce systematic bias in a sparse and operationally sensitive regime, $\lambda{=}1$ is preferable.
+
+Even with $\lambda{=}1$, the residual bias (${\approx}{+}2$~EU) is operationally relevant in start-up and shutdown conditions where precise low-flow estimation is critical for safety. The density-driven nature of this effect---persistent across MCAR and MAR, where auxiliaries remain fully available---rules out auxiliary scarcity as the primary cause. Practical mitigations include targeted oversampling for $y\!\in\![0,20]$, band-weighted losses that explicitly penalize low-flow errors, regime-aware heads, or quantile/heteroscedastic objectives.
+
+
+\subsection{Downstream operational impact}
+To test whether reconstruction gains transfer to decisions, we evaluate a downstream alerting task using train-calibrated thresholds and additional masking on the test fold (protocol details in Appendix~\ref{app:downstream-details}). Replacing the zero-score fallback with CDAE reconstructions increases PR-AUC from $\downstreamPRAUCBaseline$ to $\downstreamPRAUC$ and precision at 80\% recall from $\downstreamPrecisionAtRecallBaseline$ to $\downstreamPrecisionAtRecall$.
+
+This strengthens the practical reading of the reconstruction metrics. Virtual-sensing quality is reflected not only in lower pointwise error, but also in better threshold-based monitoring behavior under additional target suppression.
+
+Overall, the evidence supports three conclusions. First, the target is reconstructable under a fully leakage-safe industrial pipeline with strict chronology. Second, mechanism-aware masking shows strong performance under MCAR and MAR and the expected degradation under MNAR. Third, aggregate accuracy alone is insufficient to characterize deployment quality: residual diagnostics, regime-specific bias, and downstream alerting expose additional structure that materially affects practical interpretation.
+
+
+\section{Limitations and Threats to Validity}\label{sec:limitations}
+
+All Phase~2 results use 80\% target masking, a deliberately severe stress test where only one in five target values remains observed during evaluation and auxiliaries stay available (single-sensor outage setting). This is a methodological limitation for external scope: it does not represent milder outage rates or multi-sensor failures. Its impact on the current study is conservative rather than inflationary, because the protocol increases difficulty by design. On a 0--86~EU scale, CDAE still reaches MAE $\approx 2.3$--$2.5$ with $\lambda{=}1$ (improving to $1.9$--$2.1$ with $\lambda{=}0$), and explained variance spans from $\mnarRtwo$ (MNAR, $\lambda{=}1$) to $\ablationLambdaZeroMcarRtwo$ (MCAR, $\lambda{=}0$), i.e., about 78--95\% of target variability under extreme masking. The limitations below therefore contextualize generalization boundaries without overturning the core conclusion that the method is effective under realistic, high-stress conditions.
+
+\paragraph{Evaluation scope and masked-index restriction.}
+A key limitation is that all metrics are computed only on masked indices $\mathcal{M}$ (cardinality per \eqref{eq:mask-size}). The impact is that results characterize imputation quality under outage, not a mixed observed+missing operating score. This choice is intentional and methodologically protective: it matches the deployment objective (where the target is absent,and auxiliaries present) and avoids optimistic bias from scoring where the true target is already available. The low-flow overestimation in $[0,20]$~EU (\S\ref{sec:bias-analysis}) is therefore interpreted as a regime-specific validity bound, not an artifact of leakage.
+
+\paragraph{Temporal dependence and statistical test assumptions.}
+KS and Shapiro--Wilk diagnostics in Table~\ref{tab:controlled-80} are computed on temporally correlated masked indices, so strict i.i.d.-based hypothesis-testing assumptions are violated. The practical impact is that their $p$-values are descriptive rather than confirmatory. Validity of the main performance claims is preserved because MAE, RMSE, and $R^2$ remain point-wise metrics under dependence, and uncertainty is reported with nonparametric bootstrap intervals (\eqref{eq:bootstrap-ci}). In this context, the large KS discrepancy with $\lambda{=}1$ ($D\approx 0.38$--$0.40$) and its reduction with $\lambda{=}0$ ($\approx 0.16$) are treated as distributional diagnostics, not causal proof.
+
+\paragraph{Domain shifts and nonstationarity.}
+The dataset covers one operational year with clear nonstationarity (Fig.~\ref{fig:temporal_missing_patterns}), which limits temporal transportability. Its impact is strongest under MNAR, where blocked split plus value-dependent masking amplifies degradation relative to MCAR/MAR. Internal validity is mitigated by design: the same chronological protocol is applied consistently across mechanisms and baselines, and adaptive head-skip ($s^*=0.361$) enforces minimum training coverage ($\ge 20\%$, $\ge 10{,}000$ samples). The ablation evidence ($\lambda{=}0$ raises MNAR $R^2$ to $\ablationLambdaZeroMnarRtwo$) further indicates that part of the drop is loss-related, not solely architectural.
+
+\paragraph{Auxiliary dependency and single-sensor outage assumption.}
+The method targets single-sensor outage and assumes auxiliary infrastructure remains available. This limits conclusions for broader sensor-network failures. For the present study objective, however, this is a feature rather than a flaw: it matches the intended deployment scenario and leverages physically correlated auxiliaries (Appendix Table~\ref{tab:selected_features_target}, e.g., \texttt{1251\_FIC\_801C}, $\rho=0.991$). Thus, conclusions remain valid for single-target virtual sensing, while multi-sensor robustness remains future work.
+
+\paragraph{Mechanism specification and simulation fidelity.}
+MCAR/MAR/MNAR are controlled simulations (\eqref{eq:mask-size}--\eqref{eq:mnar-prob}) and cannot capture all failure modes of real plants. The impact is limited mechanism fidelity, especially for mixed-cause outages. This is mitigated by reporting all three mechanisms separately and by adopting industrially plausible behavior (Table~\ref{tab:missing-data}) rather than a single assumed process. Even under the hardest mechanism (MNAR), CDAE remains above KNN-Imputer ($R^2=\knnMnarRtwo$) and improves further with $\lambda{=}0$ ($R^2=\ablationLambdaZeroMnarRtwo$), supporting robustness of relative conclusions.
+
+\paragraph{Loss weighting and the $\lambda{=}1$ design choice.}
+Choosing $\lambda{=}1$ for the main Phase~2 report is a modeling limitation if the objective were only global error minimization. Its measurable impact is conservative global MAE relative to $\lambda{=}0$ (17--19\% improvement in \S\ref{sec:ablation}). At the same time, the band-restricted analysis (\S\ref{sec:bias-analysis}, Table~\ref{tab:bias-band}) shows the opposite direction in sparse low-flow: $\lambda{=}0$ worsens bias by ${\approx}\,0.4$~EU (paired $\Delta$Bias CI excludes zero). Hence, validity is preserved through transparent trade-off reporting: $\lambda{=}0$ is preferable for global MAE, while $\lambda{=}1$ better protects low-flow fidelity.
+
+\paragraph{Feature selection and correlation-based screening}
+Phase~1 screening uses a Pearson-based score $|\rho_{x_j,t}|\times(C_j/100)$ with fixed thresholds ($|\rho|\ge 0.30$, $C\ge 70\%$). The limitation is potential under-detection of nonlinear predictors and possible redundancy among highly correlated sensors. The impact is likely concentrated in minority regimes such as low flow. For the current study, internal validity is mitigated by strict train-only selection and physically coherent retained variables (10 auxiliaries from 64 eligible, 140 total), while future extensions can test mutual information and regime-aware screening.
+
+\paragraph{Low-density regime bias and operational implications.}
+A persistent overestimation remains in the $[0,20]$ band (\S\ref{sec:bias-analysis}), which is operationally relevant for start-up/shutdown decisions. The impact is regime-specific calibration risk despite strong global metrics. This limitation is explicitly bounded rather than hidden: it appears across all mechanisms \emph{and} both loss-weighting variants (Table~\ref{tab:bias-band}), with partial mitigation under $\lambda{=}1$. That pattern supports a density-driven interpretation and provides a clear path for mitigation (oversampling, band-weighting, regime-aware heads, quantile/heteroscedastic losses).
+
+\paragraph{Generalization scope and external validity.}
+External validity is limited by focus on one primary target (\texttt{1251\_FIT\_801C\_2}) in one industrial context. The immediate impact is that absolute performance should not be extrapolated to all plants without replication. This is partially mitigated by a secondary-target replication (\texttt{1251\_FIT\_801B\_2}, $R^2\ge 0.979$) and by consistent superiority over KNN under all mechanisms and both loss settings, supporting transfer potential while still requiring broader multicondition validation.
+
+\paragraph{Computational and reproducibility considerations.}
+Adaptive head-skip scans 51 candidates each run, introducing additional computation. The impact is modest runtime overhead, not methodological fragility. Validity and auditability are strengthened by systematic artifact persistence (splits, feature screening outputs, train-fitted preprocessing objects, and model files), with inventories centralized in \ref{app:phase1}--\ref{app:phase2} and \ref{sec:app-reproducibility}.
+
+
+\section{Reproducibility and Artifacts}\label{sec:reproducibility}
+
+All reported results follow fixed seeds and train-only preprocessing under the leakage-safe protocol in \S\ref{sec:protocol}. Exact reruns are supported by persisted split indices, adaptive head-skip coverage reports, feature-screening metadata, train-fitted imputers/scalers, model checkpoints, mechanism-specific metric summaries, and structured plot/result files. The complete manifest, hyperparameter tables, and concrete directory examples are reported in Appendix~\ref{sec:app-reproducibility}.
+
+
+
+
+\section*{Acknowledgments}
+
+The authors thank the industrial partners for providing the sulfate production dataset and the Chemical Engineering Department at UFRJ for computational resources.
