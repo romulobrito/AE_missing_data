@@ -1,0 +1,51 @@
+{
+  "variant": "aux_mlp",
+  "seed": 42,
+  "protocol_source": "/home/romulo/Documentos/PEQ-POSDOC-UFRJ/abordagem-cs-dados-faltantes/validacao_dados_ausentes_codigos/CDAE_validacao_melhorado/testes/baselines_leakage_safe/primary_target_v1/shared",
+  "split_mode": "blocked_by_index",
+  "head_skip": 0.361,
+  "n_features": 10,
+  "missing_rate": 0.8,
+  "mechanisms": [
+    "MCAR",
+    "MAR",
+    "MNAR"
+  ],
+  "training": {
+    "epochs": 50,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "patience": 20,
+    "dropout": 0.2,
+    "latent_dim": 16
+  },
+  "created_at_utc": "2026-07-13T17:07:29.191986+00:00",
+  "config": {
+    "data_path": "/home/romulo/Documentos/PEQ-POSDOC-UFRJ/abordagem-cs-dados-faltantes/sulfatos_dados_concatenados_formatados_2021.h5",
+    "feature_config_path": "/home/romulo/Documentos/PEQ-POSDOC-UFRJ/abordagem-cs-dados-faltantes/validacao_dados_ausentes_codigos/CDAE_validacao_melhorado/outputs/cdae_optimal_20251226_171939/feature_selection_config.json",
+    "protocol_shared_source": "/home/romulo/Documentos/PEQ-POSDOC-UFRJ/abordagem-cs-dados-faltantes/validacao_dados_ausentes_codigos/CDAE_validacao_melhorado/testes/baselines_leakage_safe/primary_target_v1/shared",
+    "output_root": "/home/romulo/Documentos/PEQ-POSDOC-UFRJ/abordagem-cs-dados-faltantes/validacao_dados_ausentes_codigos/CDAE_validacao_melhorado/testes/ablation_aux_mlp/primary_target_v1",
+    "missing_rate": 0.8,
+    "seed": 42,
+    "bootstrap_n": 1000,
+    "aux_col": "",
+    "epochs": 50,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "patience": 20,
+    "dropout": 0.2,
+    "latent_dim": 16,
+    "device": "cpu"
+  },
+  "model_config": {
+    "model_type": "aux_mlp",
+    "n_features": 10,
+    "capacity_basis_in_dim": 12,
+    "h1": 96,
+    "h2": 48,
+    "latent_dim": 16,
+    "parameter_count": 7681,
+    "dropout": 0.2,
+    "seed": 42
+  }
+}

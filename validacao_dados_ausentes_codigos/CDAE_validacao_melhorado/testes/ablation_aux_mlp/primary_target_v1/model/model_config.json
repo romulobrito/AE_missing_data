@@ -1,0 +1,11 @@
+{
+  "model_type": "aux_mlp",
+  "n_features": 10,
+  "capacity_basis_in_dim": 12,
+  "h1": 96,
+  "h2": 48,
+  "latent_dim": 16,
+  "parameter_count": 7681,
+  "dropout": 0.2,
+  "seed": 42
+}

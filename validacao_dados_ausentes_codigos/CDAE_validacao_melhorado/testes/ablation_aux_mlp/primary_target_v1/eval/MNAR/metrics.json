@@ -1,0 +1,30 @@
+{
+  "metrics": {
+    "MAE": 2.7840006351470947,
+    "RMSE": 4.4232322308375265,
+    "R2": 0.6198634505271912,
+    "n_samples": 2446,
+    "mechanism": "MNAR",
+    "missing_rate": 0.8,
+    "model": "aux_mlp",
+    "bootstrap_B": 1000,
+    "MAE_bootstrap": 2.78534649515152,
+    "MAE_CI_low": 2.6487379133701325,
+    "MAE_CI_high": 2.92455153465271,
+    "RMSE_bootstrap": 4.422318451460752,
+    "RMSE_CI_low": 4.047015358395422,
+    "RMSE_CI_high": 4.807516138813724
+  },
+  "model_config": {
+    "model_type": "aux_mlp",
+    "n_features": 10,
+    "capacity_basis_in_dim": 12,
+    "h1": 96,
+    "h2": 48,
+    "latent_dim": 16,
+    "parameter_count": 7681,
+    "dropout": 0.2,
+    "seed": 42
+  },
+  "timestamp_utc": "2026-07-13T17:07:33.553924+00:00"
+}
