@@ -17,8 +17,8 @@ MODEL_NAMES = {
     "knn": "KNN-Imputer",
     "ridge": "Ridge",
     "hgb": "HGB",
-    "cdae_l1": r"TCDR ($\\lambda=1$)",
-    "cdae_l0": r"TCDR ($\\lambda=0$)",
+    "cdae_l1": r"TCDR ($\lambda=1$)",
+    "cdae_l0": r"TCDR ($\lambda=0$)",
 }
 MECHANISMS = ("MCAR", "MAR", "MNAR")
 
