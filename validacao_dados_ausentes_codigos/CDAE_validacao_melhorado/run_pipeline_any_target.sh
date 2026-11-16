@@ -77,15 +77,12 @@ echo "  PASSO 1/4: Preparando ambiente"
 echo "=============================================="
 
 # Pasta principal para resultados complementares
-COMPLEMENTAR_BASE="resultados_complementares/${TARGET_SAFE}"
+COMPLEMENTAR_BASE="resultados_complementares/${TARGET_SAFE}/run_${TIMESTAMP}"
 OUTPUT_CDAE="${COMPLEMENTAR_BASE}/cdae_${TIMESTAMP}"
 TESTES_BASE="${COMPLEMENTAR_BASE}/validacao_metodologica"
 
-if [ -d "$TESTES_BASE" ]; then
-    echo "Removendo testes anteriores para $TARGET..."
-    rm -rf "$TESTES_BASE"
-fi
 mkdir -p "$TESTES_BASE"
+echo "Execucao isolada e nao destrutiva: $COMPLEMENTAR_BASE"
 mkdir -p "$OUTPUT_CDAE"
 
 echo "OK: Ambiente preparado"
@@ -305,7 +302,7 @@ for mech_dir in mechanisms:
     
     # Ler resultados
     with open(result_file, 'r') as f:
-        data = json.load(f)
+        data = json.load(f)["metrics"]
     
     results.append({
         'Target': target,
