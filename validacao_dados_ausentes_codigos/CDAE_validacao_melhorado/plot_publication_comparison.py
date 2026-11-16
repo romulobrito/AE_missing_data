@@ -17,6 +17,7 @@ MODEL_NAMES = {
     "knn": "KNN-Imputer",
     "ridge": "Ridge",
     "hgb": "HGB",
+    "aux_mlp": "Auxiliary-only MLP",
     "cdae_l1": r"TCDR ($\lambda=1$)",
     "cdae_l0": r"TCDR ($\lambda=0$)",
 }
@@ -27,7 +28,7 @@ def plot_metric(data: dict, key: str, output: Path) -> None:
     fig, ax = plt.subplots(figsize=(10.5, 5.2), constrained_layout=True)
     names = list(MODEL_NAMES)
     x = np.arange(len(MECHANISMS))
-    bar_width = 0.15
+    bar_width = 0.12
     for i, model in enumerate(names):
         values = [float(data[model][mech][key]) for mech in MECHANISMS]
         pos = x + (i - (len(names) - 1) / 2) * bar_width
@@ -56,9 +57,12 @@ def plot_metric(data: dict, key: str, output: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--summary", type=Path, required=True)
+    parser.add_argument("--aux-mlp-summary", type=Path, required=True, help="Independent auxiliary-only MLP summary")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     data = json.loads(args.summary.read_text(encoding="utf-8"))
+    aux_mlp = json.loads(args.aux_mlp_summary.read_text(encoding="utf-8"))
+    data["aux_mlp"] = aux_mlp["metrics"]
     for model in MODEL_NAMES:
         for mech in MECHANISMS:
             if model not in data or mech not in data[model]:
