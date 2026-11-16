@@ -60,6 +60,7 @@ Additional mandatory provenance items: raw dataset SHA-256; row order/date-colum
 ```bash
 python CDAE_validacao_melhorado/plot_publication_comparison.py \
   --summary CDAE_validacao_melhorado/testes/baselines_leakage_safe/primary_target_v1/consolidated/comparison_summary.json \
+  --aux-mlp-summary CDAE_validacao_melhorado/testes/ablation_aux_mlp/primary_target_v1/consolidated/aux_mlp_summary.json \
   --output /PATH/OUTPUT_FIGURES
 ```
 
