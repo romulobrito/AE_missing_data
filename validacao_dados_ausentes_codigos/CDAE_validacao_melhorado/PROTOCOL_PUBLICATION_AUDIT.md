@@ -43,6 +43,10 @@ Additional mandatory provenance items: raw dataset SHA-256; row order/date-colum
 - Full and secondary-target shell runners now explicitly pass chronology flags and enable `--strict_temporal` in Phase 1 and Phase 2.
 - `CDAE.py` and `teste_controlado_cdae_v2.py` stop with an error if strict chronological splitting leaves an empty observed-target fold, instead of silently randomly resplitting.
 - `baselines/protocol.py` has an equivalent guard when strict validation is requested.
+- Both complete-run scripts now write to timestamp-specific directories instead of removing existing experimental artifacts (the old full runner called `rm -rf testes`; the secondary-target runner deleted earlier mechanism results).
+- Both consolidation blocks now correctly read numeric fields inside the `metrics` object of `controlled_test_results.json`; the former top-level `get` pattern could silently write zero-valued summary columns.
+- `audit_publication_protocol.py` also reports SHA-256 hashes of available Phase 2 checkpoints. Identical file hashes establish byte identity; different hashes do not automatically establish different tensors. Checkpoint identity is **unknown** when files are missing.
+- `plot_publication_comparison.py` can regenerate large-label vector PDF and 300-dpi PNG comparison figures from the committed aggregate JSON, without accessing confidential measurements. Multi-panel parity and temporal figures still require original prediction arrays or raw data.
 - No historic metrics or model artifacts were changed. A fresh run under the corrected scripts is a **new experiment** until its actual indices and metrics have been checked.
 
 ## Reporting changes for manuscript
@@ -50,3 +54,18 @@ Additional mandatory provenance items: raw dataset SHA-256; row order/date-colum
 - Describe the exact algorithmic split as **5% test followed by 10% of the remainder for validation**, yielding about **85.5%/9.5%/5%** of the retained chronology.
 - Specify explicitly that the controlled Phase 2 networks are independently fitted on the corresponding chronological folds, rather than implicitly suggesting the Phase 1 checkpoint is reused. The contiguous-outage replay uses its own independently trained model.
 - Maintain transparency that artifacts needed for exact reproduction of the historic industrial results are constrained by confidentiality. Availability of publication-grade source code is not equivalent to publication of the training and evaluation populations.
+
+## Generate larger comparison figures from committed statistics
+
+```bash
+python CDAE_validacao_melhorado/plot_publication_comparison.py \
+  --summary CDAE_validacao_melhorado/testes/baselines_leakage_safe/primary_target_v1/consolidated/comparison_summary.json \
+  --output /PATH/OUTPUT_FIGURES
+```
+
+This produces vector PDF and 300-dpi PNG equivalents for the MAE and R-squared comparisons. It is **not** a substitute for checking the complete paper layout after compilation.
+
+## Scientific interpretation of controlled mechanisms
+
+Each of the three controlled commands fits its own neural model. Fixed seeds and equal hyperparameters make comparable runs possible, but independent checkpoint weights must be verified before concluding that all metric changes arise only from mechanism-selected scoring populations. Comparing `best_model.pth` hashes is a first check; inspecting tensors and fixed predictions is more conclusive if hashes differ.
+
