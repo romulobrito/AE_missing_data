@@ -639,6 +639,8 @@ def main(args):
     test_idx_model = [i for i in test_idx if i in df_with_target.index]
 
     if (len(train_idx_model) == 0) or (len(val_idx_model) == 0) or (len(test_idx_model) == 0):
+        if (args.blocked_by_index or args.time_column) and args.strict_temporal:
+            raise ValueError("Chronological split contains an empty target-observed fold; refusing random resplit under strict_temporal.")
         print(" WARNING: Empty split after filtering by target. Resplitting within available rows.")
         available_idx = list(df_with_target.index)
         train_idx_model, temp_idx_model = train_test_split(available_idx, test_size=0.3, random_state=args.seed)

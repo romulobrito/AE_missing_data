@@ -156,6 +156,8 @@ def prepare_protocol_artifacts(cfg: BaselineProtocolConfig) -> Dict[str, object]
         or len(val_idx_model) == 0
         or len(test_idx_model) == 0
     ):
+        if cfg.strict_validation:
+            raise ValueError("Empty target-observed fold in the chronological split; random resplitting is prohibited in strict validation.")
         from sklearn.model_selection import train_test_split
 
         available_idx = list(df_with_target.index)

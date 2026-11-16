@@ -1,5 +1,8 @@
 # Reconstructing Highly Missing Industrial Data: EDA-Driven Autoencoder Success and Systematic Validation
 
+> **Publication protocol notice (2026):** The examples and historical point estimates in this README belong to earlier exploratory configurations and should **not** be treated as direct reproductions of the current single-target, chronological, train-only evaluation manuscript. For its relevant implementation, inspect `validacao_dados_ausentes_codigos/CDAE_validacao_melhorado/`. The exact 5%-test/10%-remaining-validation rule, separately fitted mechanism runs, unavailable historical split/checkpoint files, safe replay commands and provenance-audit instructions are documented in [PROTOCOL_PUBLICATION_AUDIT.md](validacao_dados_ausentes_codigos/CDAE_validacao_melhorado/PROTOCOL_PUBLICATION_AUDIT.md). This does not establish exact historical reproduction.
+
+
 This study presents a comprehensive two-phase approach for autoencoder-based missing data imputation in sulfate production processes
 
 ##  Overview

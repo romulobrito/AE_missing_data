@@ -25,13 +25,10 @@ cd "$BASE_DIR"
 echo "=============================================="
 echo "  PASSO 1/4: Limpando pasta testes"
 echo "=============================================="
-if [ -d "testes" ]; then
-    rm -rf testes
-    echo "OK: Pasta testes removida"
-else
-    echo "OK: Pasta testes nao existe (nada a limpar)"
-fi
-mkdir -p testes
+TESTES_BASE="testes/publication_protocol_${TIMESTAMP}"
+export TESTES_BASE
+mkdir -p "$TESTES_BASE"
+echo "Resultados desta execucao: $TESTES_BASE (historicos preservados)"
 echo ""
 
 # ============================================================================
@@ -57,6 +54,7 @@ python CDAE.py \
     --output "$OUTPUT_CDAE" \
     --blocked_by_index \
     --auto_skip_until_coverage \
+    --strict_temporal \
     --min_target_coverage 0.2 \
     --min_target_count 10000 \
     --max_skip_head_frac 0.95 \
@@ -119,6 +117,14 @@ echo "----------------------------------------------"
 echo "  Teste 1/3: MCAR (80% missing)"
 echo "----------------------------------------------"
 python teste_controlado_cdae_v2.py \
+    --blocked_by_index \
+    --auto_skip_until_coverage \
+    --min_target_coverage 0.2 \
+    --min_target_count 10000 \
+    --max_skip_head_frac 0.95 \
+    --time_test_size 0.05 \
+    --time_val_size 0.1 \
+    --strict_temporal \
     --data "$DATA_FILE" \
     --feature_config "$FEATURE_CONFIG" \
     --mechanism MCAR \
@@ -127,7 +133,7 @@ python teste_controlado_cdae_v2.py \
     --batch 128 \
     --latent 16 \
     --bootstrap_n 1000 \
-    --output testes/MCAR_80pct \
+    --output "$TESTES_BASE/MCAR_80pct" \
     --seed 42
 
 if [ $? -eq 0 ]; then
@@ -143,6 +149,14 @@ echo "----------------------------------------------"
 echo "  Teste 2/3: MAR (80% missing)"
 echo "----------------------------------------------"
 python teste_controlado_cdae_v2.py \
+    --blocked_by_index \
+    --auto_skip_until_coverage \
+    --min_target_coverage 0.2 \
+    --min_target_count 10000 \
+    --max_skip_head_frac 0.95 \
+    --time_test_size 0.05 \
+    --time_val_size 0.1 \
+    --strict_temporal \
     --data "$DATA_FILE" \
     --feature_config "$FEATURE_CONFIG" \
     --mechanism MAR \
@@ -151,7 +165,7 @@ python teste_controlado_cdae_v2.py \
     --batch 128 \
     --latent 16 \
     --bootstrap_n 1000 \
-    --output testes/MAR_80pct \
+    --output "$TESTES_BASE/MAR_80pct" \
     --seed 42
 
 if [ $? -eq 0 ]; then
@@ -167,6 +181,14 @@ echo "----------------------------------------------"
 echo "  Teste 3/3: MNAR (80% missing)"
 echo "----------------------------------------------"
 python teste_controlado_cdae_v2.py \
+    --blocked_by_index \
+    --auto_skip_until_coverage \
+    --min_target_coverage 0.2 \
+    --min_target_count 10000 \
+    --max_skip_head_frac 0.95 \
+    --time_test_size 0.05 \
+    --time_val_size 0.1 \
+    --strict_temporal \
     --data "$DATA_FILE" \
     --feature_config "$FEATURE_CONFIG" \
     --mechanism MNAR \
@@ -175,7 +197,7 @@ python teste_controlado_cdae_v2.py \
     --batch 128 \
     --latent 16 \
     --bootstrap_n 1000 \
-    --output testes/MNAR_80pct \
+    --output "$TESTES_BASE/MNAR_80pct" \
     --seed 42
 
 if [ $? -eq 0 ]; then
@@ -195,10 +217,11 @@ echo "=============================================="
 
 python << 'EOF'
 import json
+import os
 from pathlib import Path
 import pandas as pd
 
-base_dir = Path("testes")
+base_dir = Path(os.environ["TESTES_BASE"])
 mechanisms = ["MCAR_80pct", "MAR_80pct", "MNAR_80pct"]
 
 results = []
@@ -220,7 +243,7 @@ for mech_dir in mechanisms:
     
     # Ler resultados
     with open(result_file, 'r') as f:
-        data = json.load(f)
+        data = json.load(f)["metrics"]
     
     results.append({
         'Mecanismo': mech_name,
@@ -258,15 +281,15 @@ echo "==========================================================================
 echo ""
 echo "Resultados:"
 echo "  - CDAE.py: $OUTPUT_CDAE"
-echo "  - Validacao MCAR: testes/MCAR_80pct/"
-echo "  - Validacao MAR: testes/MAR_80pct/"
-echo "  - Validacao MNAR: testes/MNAR_80pct/"
-echo "  - Relatorio consolidado: testes/RESULTADOS_CONSOLIDADOS_80PCT.csv"
+echo "  - Validacao MCAR: $TESTES_BASE/MCAR_80pct/"
+echo "  - Validacao MAR: $TESTES_BASE/MAR_80pct/"
+echo "  - Validacao MNAR: $TESTES_BASE/MNAR_80pct/"
+echo "  - Relatorio consolidado: $TESTES_BASE/RESULTADOS_CONSOLIDADOS_80PCT.csv"
 echo ""
 echo "Para visualizar plots:"
 echo "  - CDAE: $OUTPUT_CDAE/temporal_comparison_plot_cdae.png"
-echo "  - MCAR: testes/MCAR_80pct/controlled_cdae_v2_*/controlled_test_results.png"
-echo "  - MAR: testes/MAR_80pct/controlled_cdae_v2_*/controlled_test_results.png"
-echo "  - MNAR: testes/MNAR_80pct/controlled_cdae_v2_*/controlled_test_results.png"
+echo "  - MCAR: $TESTES_BASE/MCAR_80pct/controlled_cdae_v2_*/controlled_test_results.png"
+echo "  - MAR: $TESTES_BASE/MAR_80pct/controlled_cdae_v2_*/controlled_test_results.png"
+echo "  - MNAR: $TESTES_BASE/MNAR_80pct/controlled_cdae_v2_*/controlled_test_results.png"
 echo ""
 
