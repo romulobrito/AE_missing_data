@@ -114,6 +114,7 @@ python CDAE.py \
     --output "$OUTPUT_CDAE" \
     --blocked_by_index \
     --auto_skip_until_coverage \
+    --strict_temporal \
     --min_target_coverage 0.2 \
     --min_target_count 5000 \
     --max_skip_head_frac 0.95 \
@@ -177,6 +178,14 @@ echo "----------------------------------------------"
 echo "  Teste 1/3: MCAR (80% missing)"
 echo "----------------------------------------------"
 python teste_controlado_cdae_v2.py \
+    --blocked_by_index \
+    --auto_skip_until_coverage \
+    --min_target_coverage 0.2 \
+    --min_target_count 5000 \
+    --max_skip_head_frac 0.95 \
+    --time_test_size 0.05 \
+    --time_val_size 0.1 \
+    --strict_temporal \
     --data "$DATA_FILE" \
     --feature_config "$FEATURE_CONFIG" \
     --mechanism MCAR \
@@ -201,6 +210,14 @@ echo "----------------------------------------------"
 echo "  Teste 2/3: MAR (80% missing)"
 echo "----------------------------------------------"
 python teste_controlado_cdae_v2.py \
+    --blocked_by_index \
+    --auto_skip_until_coverage \
+    --min_target_coverage 0.2 \
+    --min_target_count 5000 \
+    --max_skip_head_frac 0.95 \
+    --time_test_size 0.05 \
+    --time_val_size 0.1 \
+    --strict_temporal \
     --data "$DATA_FILE" \
     --feature_config "$FEATURE_CONFIG" \
     --mechanism MAR \
@@ -225,6 +242,14 @@ echo "----------------------------------------------"
 echo "  Teste 3/3: MNAR (80% missing)"
 echo "----------------------------------------------"
 python teste_controlado_cdae_v2.py \
+    --blocked_by_index \
+    --auto_skip_until_coverage \
+    --min_target_coverage 0.2 \
+    --min_target_count 5000 \
+    --max_skip_head_frac 0.95 \
+    --time_test_size 0.05 \
+    --time_val_size 0.1 \
+    --strict_temporal \
     --data "$DATA_FILE" \
     --feature_config "$FEATURE_CONFIG" \
     --mechanism MNAR \
