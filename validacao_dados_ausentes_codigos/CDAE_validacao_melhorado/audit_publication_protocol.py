@@ -54,6 +54,11 @@ def discover(run: Path) -> Path:
         candidate = run / rel
         if candidate.is_file():
             return candidate
+    candidates = sorted(run.rglob("splits_indices.npz")) if run.is_dir() else []
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        raise ValueError(f"Multiple split artifacts under {run}; pass the specific run directory.")
     raise FileNotFoundError(f"No splits_indices.npz under {run}")
 
 
@@ -83,6 +88,10 @@ def report_one(name: str, path: Path) -> tuple[dict[str, np.ndarray], dict[str, 
     metadata["coverage_report"] = read_json_if_present(run / "coverage_report.json")
     metadata["run_manifest"] = read_json_if_present(run / "run_manifest.json")
     metadata["dataset_metadata"] = read_json_if_present(run / "dataset_metadata.json")
+    checkpoint = run / "best_model.pth"
+    metadata["checkpoint_sha256"] = sha256(checkpoint) if checkpoint.is_file() else None
+    config_candidates = [run / "controlled_test_results.json", run / "complete_pipeline_results.json"]
+    metadata["results_file"] = next((str(p) for p in config_candidates if p.is_file()), None)
     return indices, metadata
 
 
@@ -118,11 +127,27 @@ def main() -> int:
         if not all(x["same_indices_in_same_order"] for x in agreement.values()):
             failures.append(f"{name} differs from Phase 1 split indices")
 
+    neural_hashes = [
+        entry["metadata"]["checkpoint_sha256"]
+        for entry in output["comparisons"]
+        if entry["metadata"]["run"].startswith("phase2_")
+    ]
+    output["phase2_checkpoint_hashes"] = neural_hashes
+    output["phase2_checkpoints_identical_as_files"] = (
+        len(neural_hashes) >= 2 and all(hash_value is not None for hash_value in neural_hashes)
+        and len(set(neural_hashes)) == 1
+    ) if neural_hashes else None
+    output["phase2_checkpoint_hash_status"] = (
+        "NOT_AVAILABLE" if not neural_hashes or any(x is None for x in neural_hashes)
+        else ("IDENTICAL_FILE_HASH" if len(set(neural_hashes)) == 1 else "DIFFERENT_FILE_HASH")
+    )
     output["status"] = "FAIL" if failures else ("PASS_INDICES_ONLY" if entries else "INCOMPLETE_NO_COMPARATORS")
     output["issues"] = failures
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     print(f"{output['status']}: {args.output}")
+    if output["phase2_checkpoint_hash_status"] == "DIFFERENT_FILE_HASH":
+        print("NOTE: phase2 checkpoints have different file hashes; model-state equivalence is not established.")
     if failures:
         for issue in failures:
             print(" -", issue)
